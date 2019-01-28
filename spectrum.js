@@ -51,31 +51,8 @@ Spectrum.prototype.drawSpectrum = function(bins) {
     var width = this.ctx.canvas.width;
     var height = this.ctx.canvas.height;
 
-    // Clear and fill with black
-    this.ctx.fillStyle = "black";
-    this.ctx.fillRect(0, 0, width, this.spectrum_height);
-
-    // Draw grid
-    var step = 10;
-    for (var i = this.min_db + 10; i <= this.max_db - 10; i += step) {
-        this.ctx.beginPath();
-        var y = this.spectrum_height - this.squeeze(i, 0, this.spectrum_height);
-        this.ctx.moveTo(20, y);
-        this.ctx.lineTo(width, y);
-        this.ctx.strokeStyle = "rgba(200, 200, 200, 0.10)";
-        this.ctx.stroke();
-    }
-
-    // Draw axes
-    this.ctx.font = "12px Arial";
-    this.ctx.fillStyle = "white";
-    this.ctx.textBaseline = "middle";
-    this.ctx.textAlign = "left";
-    var step = 10;
-    for (var i = this.min_db + 10; i <= this.max_db - 10; i += step) {
-        var y = this.spectrum_height - this.squeeze(i, 0, this.spectrum_height);
-        this.ctx.fillText(i, 5, y);
-    }
+    // Copy axes from offscreen canvas
+    this.ctx.drawImage(this.ctx_axes.canvas, 0, 0);
 
     // Scale for FFT
     this.ctx.save();
@@ -83,7 +60,7 @@ Spectrum.prototype.drawSpectrum = function(bins) {
 
     // Draw FFT bins
     this.ctx.beginPath();
-    this.ctx.moveTo(-1, this.spectrum_height - 1);
+    this.ctx.moveTo(-1, this.spectrum_height + 1);
     for (var i = 0; i < bins.length; i++) {
         var y = this.spectrum_height - 1 - this.squeeze(bins[i], 0, this.spectrum_height);
         if (y > this.spectrum_height - 1)
@@ -96,16 +73,74 @@ Spectrum.prototype.drawSpectrum = function(bins) {
         if (i == bins.length - 1)
             this.ctx.lineTo(this.wf_size + 1, y);
     }
-    this.ctx.lineTo(this.wf_size + 1, this.spectrum_height - 1);
-    this.ctx.lineWidth = 1;
-    this.ctx.strokeStyle = "#fefefe";
-    this.ctx.stroke();
+    this.ctx.lineTo(this.wf_size + 1, this.spectrum_height + 1);
     this.ctx.closePath();
-    this.ctx.fillStyle = this.gradient;
-    this.ctx.fill();
 
     // Restore scale
     this.ctx.restore();
+
+    this.ctx.strokeStyle = "#fefefe";
+    this.ctx.stroke();
+    this.ctx.fillStyle = this.gradient;
+    this.ctx.fill();
+}
+
+Spectrum.prototype.updateAxes = function() {
+    var width = this.ctx_axes.canvas.width;
+    var height = this.ctx_axes.canvas.height;
+
+    // Clear and fill with black
+    this.ctx_axes.fillStyle = "black";
+    this.ctx_axes.fillRect(0, 0, width, height);
+
+    // Draw axes
+    this.ctx_axes.font = "12px Arial";
+    this.ctx_axes.fillStyle = "white";
+    this.ctx_axes.textBaseline = "middle";
+
+    this.ctx_axes.textAlign = "left";
+    var step = 10;
+    for (var i = this.min_db + 10; i <= this.max_db - 10; i += step) {
+        var y = height - this.squeeze(i, 0, height);
+        this.ctx_axes.fillText(i, 5, y);
+
+        this.ctx_axes.beginPath();
+        this.ctx_axes.moveTo(20, y);
+        this.ctx_axes.lineTo(width, y);
+        this.ctx_axes.strokeStyle = "rgba(200, 200, 200, 0.10)";
+        this.ctx_axes.stroke();
+    }
+
+    this.ctx_axes.textBaseline = "bottom";
+    for (var i = 0; i < 11; i++) {
+        var x = Math.round(width / 10) * i;
+
+        if (this.spanHz > 0) {
+            var adjust = 0;
+            if (i == 0) {
+                this.ctx_axes.textAlign = "left";
+                adjust = 3;
+            } else if (i == 10) {
+                this.ctx_axes.textAlign = "right";
+                adjust = -3;
+            } else {
+                this.ctx_axes.textAlign = "center";
+            }
+
+            var freq = this.centerHz + this.spanHz / 10 * (i - 5);
+            if (this.centerHz + this.spanHz > 1e6)
+                freq = freq / 1e6 + "M";
+            else if (this.centerHz + this.spanHz > 1e3)
+                freq = freq / 1e3 + "k";
+            this.ctx_axes.fillText(freq, x + adjust, height - 3);
+        }
+
+        this.ctx_axes.beginPath();
+        this.ctx_axes.moveTo(x, 0);
+        this.ctx_axes.lineTo(x, height);
+        this.ctx_axes.strokeStyle = "rgba(200, 200, 200, 0.10)";
+        this.ctx_axes.stroke();
+    }
 }
 
 Spectrum.prototype.addData = function(data) {
@@ -113,14 +148,16 @@ Spectrum.prototype.addData = function(data) {
         if (data.length != this.wf_size) {
             this.wf_size = data.length;
             this.ctx_wf.canvas.width = data.length;
+            this.ctx_wf.fillStyle = "black";
+            this.ctx_wf.fillRect(0, 0, this.wf.width, this.wf.height);
         }
         this.drawSpectrum(data);
         this.addWaterfallRow(data);
-        this.render();
+        this.resize();
     }
 }
 
-Spectrum.prototype.update_spectrum_ratio = function() {
+Spectrum.prototype.updateSpectrumRatio = function() {
     this.spectrum_height = Math.round(this.canvas.height * this.spectrumPercent / 100.0);
 
     this.gradient = this.ctx.createLinearGradient(0, 0, 0, this.spectrum_height);
@@ -134,22 +171,27 @@ Spectrum.prototype.update_spectrum_ratio = function() {
 Spectrum.prototype.resize = function() {
     var width = this.canvas.clientWidth;
     var height = this.canvas.clientHeight;
+
     if (this.canvas.width != width ||
         this.canvas.height != height) {
         this.canvas.width = width;
         this.canvas.height = height;
-        this.update_spectrum_ratio();
+        this.updateSpectrumRatio();
     }
-}
 
-Spectrum.prototype.render = function() {
-    this.resize();
+    if (this.axes.width != width ||
+        this.axes.height != this.spectrum_height) {
+        this.axes.width = width;
+        this.axes.height = this.spectrum_height;
+        this.updateAxes();
+    }
+
 }
 
 Spectrum.prototype.setSpectrumPercent = function(percent) {
     if (percent >= 0 && percent <= 100) {
         this.spectrumPercent = percent;
-        this.update_spectrum_ratio();
+        this.updateSpectrumRatio();
     }
 }
 
@@ -170,12 +212,13 @@ Spectrum.prototype.toggleColor = function() {
     if (this.colorindex >= colormaps.length)
         this.colorindex = 0;
     this.colormap = colormaps[this.colorindex];
-    this.update_spectrum_ratio();
+    this.updateSpectrumRatio();
 }
 
 Spectrum.prototype.setRange = function(min_db, max_db) {
     this.min_db = min_db;
     this.max_db = max_db;
+    this.updateAxes();
 }
 
 Spectrum.prototype.rangeUp = function() {
@@ -188,10 +231,22 @@ Spectrum.prototype.rangeDown = function() {
 
 Spectrum.prototype.rangeDouble = function() {
     this.min_db *= 2; 
+    this.updateAxes();
 }
 
 Spectrum.prototype.rangeHalf = function() {
     this.min_db /= 2; 
+    this.updateAxes();
+}
+
+Spectrum.prototype.setCenterHz = function(hz) {
+    this.centerHz = hz;
+    this.updateAxes();
+}
+
+Spectrum.prototype.setSpanHz = function(hz) {
+    this.spanHz = hz;
+    this.updateAxes();
 }
 
 Spectrum.prototype.setPaused = function(paused) {
@@ -230,6 +285,8 @@ Spectrum.prototype.toggleFullscreen = function() {
 
 function Spectrum(id, options) {
     // Handle options
+    this.centerHz = (options && options.centerHz) ? options.centerHz : 0;
+    this.spanHz = (options && options.spanHz) ? options.spanHz : 0;
     this.wf_size = (options && options.wf_size) ? options.wf_size : 0;
     this.wf_rows = (options && options.wf_rows) ? options.wf_rows : 1024;
     this.spectrumPercent = (options && options.spectrumPercent) ? options.spectrumPercent : 25;
@@ -238,8 +295,8 @@ function Spectrum(id, options) {
     // Setup state
     this.paused = false;
     this.fullscreen = false;
-    this.min_db = -100;
-    this.max_db = 0;
+    this.min_db = -120;
+    this.max_db = -20;
     this.spectrum_height = 0;
 
     // Colors
@@ -252,17 +309,21 @@ function Spectrum(id, options) {
     this.canvas.width = this.canvas.clientWidth;
     this.ctx = this.canvas.getContext("2d");
     this.ctx.fillStyle = "black";
-    this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Create offscreen canvas for axes
+    this.axes = document.createElement("canvas");
+    this.axes.height = 1; // Updated later
+    this.axes.width = this.canvas.width;
+    this.ctx_axes = this.axes.getContext("2d");
 
     // Create offscreen canvas for waterfall
     this.wf = document.createElement("canvas");
     this.wf.height = this.wf_rows;
     this.wf.width = this.wf_size;
     this.ctx_wf = this.wf.getContext("2d");
-    this.ctx_wf.fillStyle = "black";
-    this.ctx_wf.fillRect(0, 0, this.ctx_wf.canvas.width, this.ctx_wf.canvas.height);
 
     // Trigger first render
-    this.update_spectrum_ratio();
-    this.render();
+    this.updateSpectrumRatio();
+    this.resize();
 }

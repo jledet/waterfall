@@ -25,9 +25,9 @@ function keypress(e, spectrum) {
 function main() {
     // Create spectrum object on canvas with ID "waterfall"
     var spectrum = new Spectrum(
-        "waterfall",
-        {spectrumPercent: 15}
-    );
+        "waterfall", {
+            spectrumPercent: 20
+    });
 
     // Bind keypress handler
     window.addEventListener("keydown", function (e) {
@@ -44,7 +44,16 @@ function main() {
     }
     ws.onmessage = function (evt) {
         var data = JSON.parse(evt.data);
-        spectrum.addData(data.s);
+        if (data.s) {
+            spectrum.addData(data.s);
+        } else {
+            if (data.center) {
+                spectrum.setCenterHz(data.center);
+            }
+            if (data.span) {
+                spectrum.setSpanHz(data.span);
+            }
+        }
     }
     ws.onerror = function(evt) {
         console.log("error: " + evt);

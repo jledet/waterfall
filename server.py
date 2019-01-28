@@ -25,6 +25,7 @@ from bottle import request, Bottle, abort, static_file
 
 app = Bottle()
 connections = set()
+opts = {}
 
 
 @app.route('/websocket')
@@ -34,6 +35,9 @@ def handle_websocket():
         abort(400, 'Expected WebSocket request.')
 
     connections.add(wsock)
+
+    # Send center frequency and span
+    wsock.send(json.dumps(opts))
 
     while True:
         try:
@@ -128,6 +132,9 @@ def main():
         framerate=args.frame_rate
     )
     tb.start()
+
+    opts['center'] = args.frequency
+    opts['span'] = args.sample_rate
 
     server = WSGIServer(("0.0.0.0", 8000), app,
                         handler_class=WebSocketHandler)
