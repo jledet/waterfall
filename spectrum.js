@@ -44,12 +44,28 @@ Spectrum.prototype.addWaterfallRow = function(bins) {
     // Copy scaled FFT canvas to screen
     this.ctx.drawImage(this.ctx_wf.canvas,
         0, 0, this.wf_size, this.wf_rows,
-        0, this.spectrum_height, width, height - this.spectrum_height);
+        0, this.spectrumHeight, width, height - this.spectrumHeight);
 }
 
 Spectrum.prototype.drawSpectrum = function(bins) {
     var width = this.ctx.canvas.width;
     var height = this.ctx.canvas.height;
+
+    // FFT averaging
+    if (this.averaging > 0) {
+        if (!this.binsAverage || this.binsAverage.length != bins.length) {
+            this.binsAverage = bins;
+        } else {
+            for (var i = 0; i < bins.length; i++) {
+                this.binsAverage[i] += (1 - this.averaging) * (bins[i] - this.binsAverage[i]);
+            }
+        }
+        bins = this.binsAverage;
+    }
+
+    // Do not draw anything if spectrum is not visible
+    if (this.ctx_axes.canvas.height < 1)
+        return;
 
     // Copy axes from offscreen canvas
     this.ctx.drawImage(this.ctx_axes.canvas, 0, 0);
@@ -60,11 +76,11 @@ Spectrum.prototype.drawSpectrum = function(bins) {
 
     // Draw FFT bins
     this.ctx.beginPath();
-    this.ctx.moveTo(-1, this.spectrum_height + 1);
+    this.ctx.moveTo(-1, this.spectrumHeight + 1);
     for (var i = 0; i < bins.length; i++) {
-        var y = this.spectrum_height - 1 - this.squeeze(bins[i], 0, this.spectrum_height);
-        if (y > this.spectrum_height - 1)
-            y = this.spectrum_height - 1;
+        var y = this.spectrumHeight - 1 - this.squeeze(bins[i], 0, this.spectrumHeight);
+        if (y > this.spectrumHeight - 1)
+            y = this.spectrumHeight - 1;
         if (y < 0)
             y = 0;
         if (i == 0)
@@ -73,7 +89,7 @@ Spectrum.prototype.drawSpectrum = function(bins) {
         if (i == bins.length - 1)
             this.ctx.lineTo(this.wf_size + 1, y);
     }
-    this.ctx.lineTo(this.wf_size + 1, this.spectrum_height + 1);
+    this.ctx.lineTo(this.wf_size + 1, this.spectrumHeight + 1);
     this.ctx.closePath();
 
     // Restore scale
@@ -158,9 +174,9 @@ Spectrum.prototype.addData = function(data) {
 }
 
 Spectrum.prototype.updateSpectrumRatio = function() {
-    this.spectrum_height = Math.round(this.canvas.height * this.spectrumPercent / 100.0);
+    this.spectrumHeight = Math.round(this.canvas.height * this.spectrumPercent / 100.0);
 
-    this.gradient = this.ctx.createLinearGradient(0, 0, 0, this.spectrum_height);
+    this.gradient = this.ctx.createLinearGradient(0, 0, 0, this.spectrumHeight);
     for (var i = 0; i < this.colormap.length; i++) {
         var c = this.colormap[this.colormap.length - 1 - i];
         this.gradient.addColorStop(i / this.colormap.length,
@@ -180,9 +196,9 @@ Spectrum.prototype.resize = function() {
     }
 
     if (this.axes.width != width ||
-        this.axes.height != this.spectrum_height) {
+        this.axes.height != this.spectrumHeight) {
         this.axes.width = width;
-        this.axes.height = this.spectrum_height;
+        this.axes.height = this.spectrumHeight;
         this.updateAxes();
     }
 
@@ -249,6 +265,26 @@ Spectrum.prototype.setSpanHz = function(hz) {
     this.updateAxes();
 }
 
+Spectrum.prototype.setAveraging = function(avg) {
+    if (avg >= 0.0 && avg <= 1.0) {
+        this.averaging = avg;
+    }
+}
+
+Spectrum.prototype.incrementAveraging = function() {
+    var avg = this.averaging + 0.05;
+    if (avg > 1)
+        avg = 1;
+    this.setAveraging(avg);
+}
+
+Spectrum.prototype.decrementAveraging = function() {
+    var avg = this.averaging - 0.05;
+    if (avg < 0)
+        avg = 0;
+    this.setAveraging(avg);
+}
+
 Spectrum.prototype.setPaused = function(paused) {
     this.paused = paused;
 }
@@ -290,14 +326,15 @@ function Spectrum(id, options) {
     this.wf_size = (options && options.wf_size) ? options.wf_size : 0;
     this.wf_rows = (options && options.wf_rows) ? options.wf_rows : 1024;
     this.spectrumPercent = (options && options.spectrumPercent) ? options.spectrumPercent : 25;
-    this.spectrumPercentStep = 5;
+    this.spectrumPercentStep = (options && options.spectrumPercentStep) ? options.spectrumPercentStep : 5;
+    this.averaging = (options && options.averaging) ? options.averaging : 0.5;
 
     // Setup state
     this.paused = false;
     this.fullscreen = false;
     this.min_db = -120;
     this.max_db = -20;
-    this.spectrum_height = 0;
+    this.spectrumHeight = 0;
 
     // Colors
     this.colorindex = 0;
