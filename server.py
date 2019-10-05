@@ -1,10 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 # Copyright (c) 2019 Jeppe Ledet-Pedersen
 # This software is released under the MIT license.
 # See the LICENSE file for further details.
-
-from __future__ import print_function, division
 
 import sys
 import json
@@ -73,7 +71,7 @@ class fft_broadcast_sink(gr.sync_block):
             p = np.fft.fftshift(p)
             for c in connections.copy():
                 try:
-                    c.send(json.dumps({'s': list(p)}, separators=(',', ':')))
+                    c.send(json.dumps({'s': p.tolist()}, separators=(',', ':')))
                 except Exception:
                     connections.remove(c)
 
